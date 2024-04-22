@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  sftp_server:
+    build:
+      context: .
+      args:
+        - SFTP_USER=${SFTP_USER}
+        - SFTP_PASSWORD=${SFTP_PASSWORD}
+    ports:
+      - "2222:22"
+    volumes:
+      - ./data:/home/${SFTP_USER}/uploads
+    environment:
+      SFTP_USER: ${SFTP_USER}
+      SFTP_PASSWORD: ${SFTP_PASSWORD}
