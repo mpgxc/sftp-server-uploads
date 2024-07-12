@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     client.listdir("/home/mpgxc/uploads").unwrap()
     client.upload(
-        "/home/mpgxc/mpgxc/sftp/.editorconfig", "/home/mpgxc/uploads/.editorconfig"
+        "/home/mpgxc/Lab/sftp-server-uploads/src/file.txt", "/home/mpgxc/uploads/.editorconfig"
     ).unwrap()
     client.listdir("/home/mpgxc/uploads").unwrap()
 
