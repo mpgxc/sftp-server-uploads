@@ -1,0 +1,20 @@
+{
+    "author": "mpgxc",
+    "license": "MIT",
+    "description": "SFTP client",
+    "name": "sftp",
+    "version": "0.0.1",
+    "main": "sftp.ts",
+    "type": "module",
+    "scripts": {
+        "run": "npx tsx sftp.ts"
+    },
+    "dependencies": {
+        "ssh2": "^1.16.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.7.7",
+        "@types/ssh2": "^1.15.1",
+        "tsx": "^4.19.1"
+    }
+}
