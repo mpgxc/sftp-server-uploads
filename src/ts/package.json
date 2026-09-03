@@ -7,7 +7,8 @@
     "main": "sftp.ts",
     "type": "module",
     "scripts": {
-        "run": "npx tsx sftp.ts"
+        "example": "npx tsx example.ts",
+        "typecheck": "tsc --noEmit"
     },
     "dependencies": {
         "ssh2": "^1.16.0"
@@ -15,6 +16,7 @@
     "devDependencies": {
         "@types/node": "^22.7.7",
         "@types/ssh2": "^1.15.1",
-        "tsx": "^4.19.1"
+        "tsx": "^4.19.1",
+        "typescript": "^5.6.3"
     }
 }

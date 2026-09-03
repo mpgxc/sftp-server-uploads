@@ -8,17 +8,30 @@ Co-author: Copilot
 
 A client for connecting to an SFTP server and performing common operations such as
 listing directory contents, uploading, and downloading files.
+
+Todas as operações públicas são decoradas com `@safe`, portanto retornam
+`Result[..., Exception]` (`Success`/`Failure`) em vez de propagar exceções.
 """
 
-import logging
-import paramiko
-from typing import Optional
-from pathlib import Path
-from returns.result import Result, Success, Failure, safe
+from __future__ import annotations
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+import logging
+from pathlib import Path
+from types import TracebackType
+from typing import List, Optional
+
+import paramiko
+from returns.result import Failure, safe
+
+logger = logging.getLogger(__name__)
+
+
+class SFTPError(Exception):
+    """Erro base do cliente SFTP."""
+
+
+class NotConnectedError(SFTPError):
+    """Levantado quando uma operação é solicitada sem conexão ativa."""
 
 
 class SFTPClient:
@@ -34,125 +47,104 @@ class SFTPClient:
         self.sftp: Optional[paramiko.SFTPClient] = None
 
     def __enter__(self) -> "SFTPClient":
-        self.connect()
+        self.connect().unwrap()
 
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         result = self.disconnect()
 
         if isinstance(result, Failure):
-            logging.error("Failed to cleanly disconnect from SFTP.")
+            logger.error("Failed to cleanly disconnect from SFTP.")
+
+    def _require_sftp(self) -> paramiko.SFTPClient:
+        """
+        Devolve a sessão SFTP ativa ou falha se o cliente não estiver conectado.
+        """
+
+        if self.sftp is None:
+            raise NotConnectedError("SFTP client not connected")
+
+        return self.sftp
 
     @safe
-    def connect(self) -> Result[None, Exception]:
+    def connect(self) -> None:
         """
         Conecta ao servidor SFTP.
         """
 
-        try:
-            self.transport = paramiko.Transport((self.hostname, self.port))
-            self.transport.connect(
-                username=self.username, password=self.password)
-            self.sftp = paramiko.SFTPClient.from_transport(self.transport)
+        transport = paramiko.Transport((self.hostname, self.port))
+        transport.connect(username=self.username, password=self.password)
 
-            logging.info(
-                f"Connected to SFTP server at {self.hostname}:{self.port}")
+        sftp = paramiko.SFTPClient.from_transport(transport)
 
-            return Success(None)
-        except Exception as e:
-            logging.error(f"Failed operation [Detail: {str(e)}]")
+        if sftp is None:
+            transport.close()
 
-            return Failure(e)
+            raise SFTPError("Could not open an SFTP session over the transport")
+
+        self.transport = transport
+        self.sftp = sftp
+
+        logger.info("Connected to SFTP server at %s:%s", self.hostname, self.port)
 
     @safe
-    def disconnect(self) -> Result[None, Exception]:
+    def disconnect(self) -> None:
         """
         Desconecta do servidor SFTP.
         """
 
-        try:
-            if self.sftp:
-                self.sftp.close()
+        if self.sftp is not None:
+            self.sftp.close()
+            self.sftp = None
 
-            if self.transport:
-                self.transport.close()
+        if self.transport is not None:
+            self.transport.close()
+            self.transport = None
 
-            logging.info(
-                f"Disconnected from SFTP server at {self.hostname}:{self.port}")
-
-            return Success(None)
-        except Exception as e:
-            logging.error(f"Failed operation [Detail: {str(e)}]")
-
-            return Failure(e)
+        logger.info("Disconnected from SFTP server at %s:%s", self.hostname, self.port)
 
     @safe
-    def listdir(self, remote_path: str) -> Result[Optional[list], Exception]:
+    def listdir(self, remote_path: str) -> List[str]:
         """
         Lista o conteúdo do diretório remoto.
         """
 
-        if self.sftp is None:
-            return Failure(Exception("SFTP client not connected"))
+        entries = self._require_sftp().listdir(remote_path)
 
-        try:
-            entries = self.sftp.listdir(remote_path)
+        logger.info("Listing directory %s: %s", remote_path, entries)
 
-            logging.info(f"Listing directory {remote_path}: {entries}")
-
-            return Success(entries)
-        except Exception as e:
-            logging.error(f"Failed operation [Detail: {str(e)}]")
-
-            return Failure(e)
+        return entries
 
     @safe
-    def upload(self, local_path: str, remote_path: str) -> Result[None, Exception]:
+    def upload(self, local_path: str, remote_path: str) -> None:
         """
         Faz upload de um arquivo local para o caminho remoto.
         """
 
-        local_path_obj = Path(local_path)
+        source = Path(local_path)
 
-        if not local_path_obj.exists():
-            return Failure(
-                FileNotFoundError(f"Local file {local_path} does not exist.")
-            )
+        if not source.exists():
+            raise FileNotFoundError(f"Local file {local_path} does not exist.")
 
-        if not local_path_obj.is_file():
-            return Failure(ValueError(f"Local path {local_path} is not a file."))
+        if not source.is_file():
+            raise ValueError(f"Local path {local_path} is not a file.")
 
-        if self.sftp is None:
-            return Failure(Exception("SFTP client not connected"))
+        self._require_sftp().put(local_path, remote_path)
 
-        try:
-            self.sftp.put(local_path, remote_path)
-
-            logging.info(f"Uploaded {local_path} to {remote_path}")
-
-            return Success(None)
-        except Exception as e:
-            logging.error(f"Failed operation [Detail: {str(e)}]")
-
-            return Failure(e)
+        logger.info("Uploaded %s to %s", local_path, remote_path)
 
     @safe
-    def download(self, remote_path: str, local_path: str) -> Result[None, Exception]:
+    def download(self, remote_path: str, local_path: str) -> None:
         """
         Faz download de um arquivo remoto para o caminho local.
         """
 
-        if self.sftp is None:
-            return Failure(Exception("SFTP client not connected"))
+        self._require_sftp().get(remote_path, local_path)
 
-        try:
-            self.sftp.get(remote_path, local_path)
-
-            logging.info(f"Downloaded {remote_path} to {local_path}")
-
-            return Success(None)
-        except Exception as e:
-            logging.error(f"Failed operation [Detail: {str(e)}]")
-
-            return Failure(e)
+        logger.info("Downloaded %s to %s", remote_path, local_path)
