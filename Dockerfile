@@ -1,11 +1,12 @@
-FROM ubuntu:latest
+FROM ubuntu:24.04
 
 ARG SFTP_USER
 ARG SFTP_PASSWORD
 
-# Instalando o servidor SSH e criando um usuário sftp
-RUN apt-get update && apt-get install -y openssh-server \
-    && useradd -rm -d /home/${SFTP_USER} -s /bin/bash -g root -G sudo -u 1001 ${SFTP_USER}
+# Instalando o servidor SSH e criando o usuário sftp (sem privilégio de sudo)
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -rm -d /home/${SFTP_USER} -s /bin/bash -u 1001 ${SFTP_USER}
 
 # Configurando o servidor SSH
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config \
