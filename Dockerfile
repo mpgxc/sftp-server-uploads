@@ -1,7 +1,17 @@
 FROM ubuntu:24.04
 
 ARG SFTP_USER
+# SFTP_PASSWORD não é usado no build: a senha é aplicada pelo entrypoint.sh em
+# tempo de execução, que também valida se ela foi definida.
 ARG SFTP_PASSWORD
+
+# Falha antes do apt-get (que leva dezenas de segundos) quando o .env foi
+# copiado do .env.example mas não preenchido — sem isso o `useradd` abaixo
+# receberia um nome de usuário vazio e falharia com um "Usage:" críptico.
+RUN test -n "${SFTP_USER}" || { \
+        echo "ERRO: SFTP_USER está vazio. Defina SFTP_USER e SFTP_PASSWORD no arquivo .env (veja .env.example)."; \
+        exit 1; \
+    }
 
 # Instalando o servidor SSH e criando o usuário sftp (sem privilégio de sudo)
 RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
